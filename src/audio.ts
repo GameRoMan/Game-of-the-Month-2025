@@ -23,10 +23,17 @@ export function setupMusic(src: string) {
 
     const promise = downloadAndDecode();
 
+    let blurred = false;
     let stopped = true;
     let source: AudioBufferSourceNode | undefined = undefined;
-    return {
+
+    const controls = {
         play() {
+            if (!document.hasFocus()) {
+                blurred = true;
+                return;
+            }
+
             stopped = false;
             promise.then(decoded => {
                 if (stopped) return;
@@ -44,4 +51,20 @@ export function setupMusic(src: string) {
             source = undefined;
         },
     };
+
+    window.addEventListener('blur', () => {
+        if (!stopped) {
+            controls.pause();
+            blurred = true;
+        }
+    });
+
+    window.addEventListener('focus', () => {
+        if (blurred) {
+            controls.play();
+            blurred = false;
+        }
+    });
+
+    return controls;
 }
