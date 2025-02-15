@@ -115,7 +115,7 @@ export function january() {
                                 ? `
                                     <span style="display: flex; align-items: center; gap: 10px">
                                         <span><strong>Score</strong>: ${getScoreWithTrophy(worm.length, BOARD_SIZES[boardSize].tiles ** 2)}</span>
-                                        <button id="january-share-button">Share</button>
+                                        <button id="january-share-button" class="light">Share</button>
                                     </span>
                                 `
                                 : ''
@@ -129,7 +129,7 @@ export function january() {
                         ${Object.keys(BOARD_SIZES)
                             .map(
                                 option =>
-                                    `<button id="january-board-size-${option}"${option === boardSize ? `style="background: var(--ui-white); color: var(--ui-black)"` : ''}>${option}</button>`,
+                                    `<button id="january-board-size-${option}"${option === boardSize ? `style="background: var(--ui-white); color: var(--ui-black)"` : ''} class="light">${option}</button>`,
                             )
                             .join('')}
                     </div>
@@ -141,14 +141,14 @@ export function january() {
                             .concat(Object.keys(SPEEDS))
                             .map(
                                 option =>
-                                    `<button id="january-speed-${option}"${option === speed ? `style="background: var(--ui-white); color: var(--ui-black)"` : ''}>${option}</button>`,
+                                    `<button id="january-speed-${option}"${option === speed ? `style="background: var(--ui-white); color: var(--ui-black)"` : ''} class="light">${option}</button>`,
                             )
                             .join('')}
                     </div>
                 </div>
                 <span>WASD/arrow keys/swipe to start</span>
 
-                <button id="january-how-to-play-button">HOW TO PLAY</button>
+                <button id="january-how-to-play-button" class="light">HOW TO PLAY</button>
             </div>
         `);
 

@@ -7,7 +7,7 @@ Play them all here: https://gotm.doteye.online
 | Month     | Game                           | Description                                                                                       |
 |-----------|--------------------------------|---------------------------------------------------------------------------------------------------|
 | January   | Wormhole                       | A variant of Snake where eating one piece of food teleports your head to the other piece of food. |
-| February  | Coming Saturday February 15th  |                                                                                                   |
+| February  | Relay                          | A puzzle game about carefully positioning repeaters and walls to safely send a secret message.    |
 | March     | Coming Saturday March 15th     |                                                                                                   |
 | April     | Coming Saturday April 19th     |                                                                                                   |
 | May       | Coming Saturday May 17th       |                                                                                                   |

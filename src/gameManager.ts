@@ -1,11 +1,12 @@
 import {startStatic} from './static.ts';
 import {clearOverlay, monthSpan, nextButton, prevButton} from './dom.ts';
 import {makeTextbox} from './makeTextbox.ts';
+import {february} from './games/february';
 import {january} from './games/january';
 
 const games = [
     january,
-    makeTextbox('Coming Saturday February 15th'),
+    february,
     makeTextbox('Coming Saturday March 15th'),
     makeTextbox('Coming Saturday April 19th'),
     makeTextbox('Coming Saturday May 17th'),
@@ -27,7 +28,7 @@ function updateMonthFromHash() {
         return;
     }
 
-    const hashMonth = new Date(`${location.hash.slice(1)} 1`).getMonth();
+    const hashMonth = new Date(`${location.hash.slice(1)} 1 2025`).getMonth();
     monthIndex = isNaN(hashMonth) || hashMonth < 0 || hashMonth > 11 ? 0 : hashMonth;
 }
 

@@ -24,12 +24,20 @@ export function clearOverlay() {
     overlay.style.pointerEvents = 'none';
 }
 
+function emptySelection() {
+    window.getSelection()?.empty();
+}
+
 function onResize() {
     const {height, width} = canvas.getBoundingClientRect();
     overlay.style.scale = (width / 600).toString();
     overlay.style.top = `${(height - 600) / 2}px`;
     overlay.style.left = `${(width - 600) / 2}px`;
 }
+
+// In games that require dragging, prevent HTML elements from being dragged along
+canvas.addEventListener('pointerdown', emptySelection);
+overlay.addEventListener('pointerdown', emptySelection);
 
 window.addEventListener('resize', onResize);
 onResize();

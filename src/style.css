@@ -43,6 +43,19 @@ button {
     line-height: 1.5;
 }
 
+button.dark {
+    border-color: #121212;
+    color: #121212;
+}
+
+button.light:focus-visible {
+    outline: 5px solid var(--ui-white);
+}
+
+button.dark:focus-visible {
+    outline: 5px solid var(--ui-black);
+}
+
 button:disabled {
     background: dimgray;
 }
@@ -111,6 +124,7 @@ td {
     left: 0;
     pointer-events: none;
     touch-action: none;
+    user-select: none;
     color: var(--ui-white);
 }
 
@@ -180,6 +194,10 @@ td {
 }
 
 @media (prefers-color-scheme: light) {
+    *:focus-visible {
+        outline: 5px solid var(--ui-black);
+    }
+
     body {
         background-color: var(--ui-white);
         color: var(--ui-black);
@@ -192,7 +210,7 @@ td {
 
     canvas,
     #settings {
-        border-color: var(--ui-black);
+        border: 1px solid var(--ui-black);
     }
 
     a {
