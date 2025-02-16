@@ -33,7 +33,7 @@ function updateMonthFromHash() {
 }
 
 function getMonthString() {
-    return new Date(2025, monthIndex).toLocaleString('default', {month: 'long'});
+    return new Date(2025, monthIndex).toLocaleString('en-US', {month: 'long'});
 }
 
 export function openPage(runner: () => () => void) {
