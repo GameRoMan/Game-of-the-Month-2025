@@ -712,6 +712,7 @@ export function february() {
         graph = makeGraph();
         tooltip = {type: 'none'};
         editor = {type: 'none'};
+        dragging = undefined;
 
         const nextLevel = +(storage.get('nextLevel') ?? '0');
 
@@ -1526,6 +1527,8 @@ export function february() {
             return;
         }
 
+        if (event.target !== overlay) return;
+
         const closest = getClosest(generateDraggables(editor.type === 'editing'), x, y, DRAG_EXTRA_RADIUS);
 
         if (closest !== undefined) {
@@ -1582,7 +1585,7 @@ export function february() {
 
     function onPointerUp(event: PointerEvent) {
         if ((event.target as HTMLElement).tagName === 'BUTTON') return;
-        if (dragging !== undefined && pointerPosition.x < 80 && pointerPosition.y < 45) {
+        if (editor.type === 'editing' && dragging !== undefined && pointerPosition.x < 80 && pointerPosition.y < 45) {
             if (dragging.type === 'tower') {
                 if (level.towers[dragging.index].type === 'start') {
                     level.towers[dragging.index].x = canvas.width / 2;
