@@ -807,6 +807,14 @@ export function february() {
 
                 switch (button.textContent) {
                     case 'TEST':
+                        if (
+                            isLevelComplete() &&
+                            !confirm(
+                                'Warning: your level is already solved. Make sure your level is in an unsolved state before entering test mode, or else it will instantly be marked as complete. Would you like to enter test mode anyway?',
+                            )
+                        )
+                            return;
+
                         editor = {type: 'testing', level: structuredClone(level)};
                         setOverlay(`
                             <button id="february-back-button" class="light" style="margin: 5px 0 0 5px">BACK</button>
@@ -866,14 +874,19 @@ export function february() {
         }
     }
 
-    function checkWin() {
-        if (levelComplete || editor.type === 'editing' || editor.type === 'menu') return;
+    function isLevelComplete() {
         const endTowersIndexes = level.towers.flatMap((tower, index) => (tower.type === 'end' ? [index] : []));
 
         // This is true if we're not on a valid level, like the menu
         if (endTowersIndexes.length === 0) return;
 
-        if (endTowersIndexes.every(index => getTowerStatus(index).unencrypted)) {
+        return endTowersIndexes.every(index => getTowerStatus(index).unencrypted);
+    }
+
+    function checkWin() {
+        if (levelComplete || editor.type === 'editing' || editor.type === 'menu') return;
+
+        if (isLevelComplete()) {
             winAudio.play();
             levelComplete = true;
 
@@ -1159,10 +1172,6 @@ export function february() {
             context.fillText(content, x, y);
         }
 
-        const won = level.towers
-            .flatMap((tower, index) => (tower.type === 'end' ? [index] : []))
-            .every(index => getTowerStatus(index).unencrypted);
-
         context.lineWidth = CONNECTION_LINE_WIDTH;
         const lines = getLines();
         for (const line of lines) {
@@ -1171,7 +1180,7 @@ export function february() {
                     ? SPY_COLOR
                     : isHoveringConnection(line)
                       ? UI_WHITE
-                      : won
+                      : isLevelComplete()
                         ? START_COLOR
                         : CONNECTION_COLOR;
             context.setLineDash(
