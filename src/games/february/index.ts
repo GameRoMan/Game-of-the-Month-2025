@@ -8,6 +8,9 @@ import {canvas, context, overlay, setOverlay} from '../../dom.ts';
 import {clamp, distance, interpolateColor, isPointOnLine, linesIntersect} from '../../util.ts';
 import {setupMusic, setupSoundEffect} from '../../audio.ts';
 import {setupStorage} from '../../shared/storage.ts';
+import {bigIntToString, booleanToBitArray, numberToBitArray, stringToBigInt} from '../../shared/serialization.ts';
+
+const TOWER_TYPES = ['start', 'end', 'small repeater', 'large repeater', 'spy', 'encryptor', 'decryptor'] as const;
 
 namespace PingState {
     interface Ping {
@@ -63,34 +66,55 @@ namespace Tooltip {
     export type Any = None | Tower | Connection;
 }
 
+namespace EditorState {
+    export interface None {
+        type: 'none';
+    }
+
+    export interface Editing {
+        type: 'editing';
+    }
+
+    export interface Menu {
+        type: 'menu';
+    }
+
+    export interface Testing {
+        type: 'testing';
+        level: Level;
+    }
+
+    export type Any = None | Editing | Menu | Testing;
+}
+
+interface Tower {
+    type: (typeof TOWER_TYPES)[number];
+    x: number;
+    y: number;
+}
+
+interface Wall {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    fixed1: boolean;
+    fixed2: boolean;
+}
+
+interface Text {
+    content: string;
+    x: number;
+    y: number;
+}
+
+interface Level {
+    towers: Tower[];
+    walls: Wall[];
+    texts: Text[];
+}
+
 export function february() {
-    interface Wall {
-        x1: number;
-        y1: number;
-        x2: number;
-        y2: number;
-        fixed1: boolean;
-        fixed2: boolean;
-    }
-
-    interface Text {
-        content: string;
-        x: number;
-        y: number;
-    }
-
-    type Level = {
-        towers: Tower[];
-        walls: Wall[];
-        texts: Text[];
-    };
-
-    interface Tower {
-        type: 'start' | 'end' | 'small repeater' | 'large repeater' | 'spy' | 'encryptor' | 'decryptor';
-        x: number;
-        y: number;
-    }
-
     type ConnectionStatus = {unencrypted: boolean; encrypted: boolean};
 
     const BACKGROUND_COLOR = '#0e1c0c';
@@ -112,6 +136,8 @@ export function february() {
     const LARGE_REPEATER_RADIUS = 25;
     const LINE_DASH_ENCRYPTED = [5, 10];
     const LINE_DASH_SPY = [1, 20];
+    const MAX_TOWERS = 250;
+    const MAX_WALLS = 50;
     const PING_SPEED_MULTIPLIER = 0.2;
     const RECTANGLE_SIZE = 10;
     const REPEATER_PREVIEW_WIDTH = 1;
@@ -123,6 +149,27 @@ export function february() {
     const WALL_LINE_WIDTH = 3;
 
     const BLANK_LEVEL = <Level>{towers: [], walls: [], texts: []};
+    const EDITOR_TEMPLATE_LEVEL = <Level>{
+        ...BLANK_LEVEL,
+        towers: [
+            {type: 'start', x: 200, y: 150},
+            {type: 'end', x: 400, y: 450},
+        ],
+    };
+    const EDITOR_LIBRARY_TOWERS: Tower[] = [
+        {type: 'large repeater', x: 210, y: 235},
+        {type: 'small repeater', x: 260, y: 235},
+        {type: 'spy', x: 295, y: 235},
+        {type: 'encryptor', x: 330, y: 235},
+        {type: 'decryptor', x: 365, y: 235},
+        {type: 'end', x: 400, y: 235},
+    ];
+    const EDITOR_LIBRARY_WALLS = [
+        {x1: 200, y1: 285, x2: 240, y2: 285, fixed1: true, fixed2: true},
+        {x1: 280, y1: 285, x2: 320, y2: 285, fixed1: false, fixed2: true},
+        {x1: 360, y1: 285, x2: 400, y2: 285, fixed1: false, fixed2: false},
+    ];
+    const EDITOR_LIBRARY_DRAGGABLES = setupLibraryDraggables();
     const LEVELS: Level[] = fillLevels([
         // 1
         {
@@ -522,6 +569,7 @@ export function february() {
     let pingState: PingState.Any = {type: 'standby'};
     let pointerPosition: {x: number; y: number} = {x: 0, y: 0};
     let graph = makeGraph<ConnectionStatus>();
+    let editor: EditorState.Any = {type: 'none'};
 
     function fillLevels(levels: Partial<Level>[]) {
         return levels.map(level => ({
@@ -540,19 +588,144 @@ export function february() {
         setLevelOverlay();
     }
 
+    function getLevelBits(l: Level) {
+        return [
+            ...numberToBitArray(l.towers.length, 8),
+            ...l.towers.flatMap(tower => [
+                ...numberToBitArray(TOWER_TYPES.indexOf(tower.type), 3),
+                ...numberToBitArray(tower.x, 10),
+                ...numberToBitArray(tower.y, 10),
+            ]),
+            ...numberToBitArray(l.walls.length, 5),
+            ...l.walls.flatMap(wall => [
+                ...numberToBitArray(wall.x1, 10),
+                ...numberToBitArray(wall.y1, 10),
+                ...numberToBitArray(wall.x2, 10),
+                ...numberToBitArray(wall.y2, 10),
+                ...booleanToBitArray(wall.fixed1),
+                ...booleanToBitArray(wall.fixed2),
+            ]),
+        ];
+    }
+
+    function serializeLevel() {
+        return (
+            '`' +
+            bigIntToString(
+                BigInt(
+                    `0b${[
+                        1, // Always start with a 1 so leading zeros are not erased
+                        ...getLevelBits(editor.type === 'testing' ? editor.level : level), // Base puzzle
+                        ...(editor.type === 'testing' ? getLevelBits(level) : []), // Optional solution
+                    ].join('')}`,
+                ),
+            ) +
+            '`'
+        );
+    }
+
+    function levelFromBits(readBits: (numBits?: number) => string) {
+        const numTowers = parseInt(readBits(8), 2);
+        if (numTowers > MAX_TOWERS) throw Error();
+
+        const towers: Tower[] = [...Array(numTowers)].map(() => {
+            const typeIndex = parseInt(readBits(3), 2);
+            const x = parseInt(readBits(10), 2);
+            const y = parseInt(readBits(10), 2);
+            return {type: TOWER_TYPES[typeIndex], x, y};
+        });
+
+        if (towers.filter(({type}) => type === 'start').length !== 1) throw Error();
+
+        const numWalls = parseInt(readBits(5), 2);
+        if (numWalls > MAX_WALLS) throw Error();
+
+        const walls: Wall[] = [...Array(numWalls)].map(() => {
+            const x1 = parseInt(readBits(10), 2);
+            const y1 = parseInt(readBits(10), 2);
+            const x2 = parseInt(readBits(10), 2);
+            const y2 = parseInt(readBits(10), 2);
+            const fixed1 = readBits(1) === '1';
+            const fixed2 = readBits(1) === '1';
+            return {x1, y1, x2, y2, fixed1, fixed2};
+        });
+
+        return {towers, walls, texts: []};
+    }
+
+    function deserializeLevel(serialized: string) {
+        const bits = stringToBigInt(serialized.replace(/`/g, '')).toString(2);
+
+        let offset = 0;
+        function readBits(numBits?: number) {
+            if (numBits === undefined) return bits.slice(offset);
+            offset += numBits;
+            return bits.slice(offset - numBits, offset);
+        }
+
+        readBits(1); // The first bit is always 1 so leading zeros are not erased
+
+        const baseLevel = levelFromBits(readBits);
+
+        let hasValidSolution = false;
+        if (offset < bits.length) {
+            level = levelFromBits(readBits);
+            updateConnectionGraph();
+            if (
+                level.towers.length === baseLevel.towers.length &&
+                level.walls.length === baseLevel.walls.length &&
+                level.towers.every((tower, index) => tower.type === baseLevel.towers[index].type) &&
+                level.walls.every(
+                    (wall, index) =>
+                        wall.fixed1 === baseLevel.walls[index].fixed1 && wall.fixed2 === baseLevel.walls[index].fixed2,
+                ) &&
+                level.towers
+                    .flatMap((tower, index) => (tower.type === 'end' ? [index] : []))
+                    .every(index => getTowerStatus(index).unencrypted)
+            ) {
+                hasValidSolution = true;
+            }
+        }
+
+        level = baseLevel;
+        updateConnectionGraph();
+
+        return hasValidSolution;
+    }
+
+    function loadLevelFromCode() {
+        const code = prompt('Enter level code to import:');
+        if (code === null) return false;
+        try {
+            if (!deserializeLevel(code)) alert('Warning: this level may not have a valid solution.');
+        } catch (error) {
+            alert('Invalid level :(');
+            return false;
+        }
+        updateConnectionGraph();
+        return true;
+    }
+
     function openMenu() {
         clearPingState();
         level = BLANK_LEVEL;
         graph = makeGraph();
         tooltip = {type: 'none'};
+        editor = {type: 'none'};
 
         const nextLevel = +(storage.get('nextLevel') ?? '0');
 
         setOverlay(`
             <div style="display: flex; flex-direction: column; align-items: center">
-                <img src="${logo}" alt="Relay" width="450">
-                <div style="display: flex; gap: 10px; width: 500px; flex-wrap: wrap; justify-content: center">
-                    ${LEVELS.map((_, index) => `<button id="february-level-button-${index}" class="light" style="width: 70px; height: 35px; ${nextLevel === index ? 'border-width: 5px; border-style: dashed; padding: 0' : ''}" ${nextLevel < index ? 'disabled' : ''}>${index + 1} ${nextLevel > index ? '🏆' : ''}</button>`).join('')}
+                <img src="${logo}" alt="Relay" width="400">
+                <div style="display: flex; flex-direction: column; gap: 25px; align-items: center"> 
+                    <div style="display: flex; gap: 5px; width: 500px; flex-wrap: wrap; justify-content: center">
+                        ${LEVELS.map((_, index) => `<button class="light" style="width: 70px; height: 35px; ${nextLevel === index ? 'border-width: 5px; border-style: dashed; padding: 0' : ''}" ${nextLevel < index ? 'disabled' : ''}>${index + 1} ${nextLevel > index ? '🏆' : ''}</button>`).join('')}
+                    </div>
+                    <div style="display: flex; gap: 5px">
+                        <button>LEVEL EDITOR</button>
+                        <button>PLAY LEVEL FROM CODE</button>
+                    </div>
                 </div>
             </div>
         `);
@@ -560,7 +733,31 @@ export function february() {
         overlay.querySelectorAll('button').forEach(button =>
             button.addEventListener('click', () => {
                 clickAudio.play();
-                loadLevel(+button.id.split('-').at(-1)!);
+
+                switch (button.textContent) {
+                    case 'LEVEL EDITOR':
+                        clearPingState();
+                        editor = {type: 'editing'};
+                        try {
+                            deserializeLevel(storage.get('editorLevel'));
+                        } catch (error) {
+                            level = structuredClone(EDITOR_TEMPLATE_LEVEL);
+                        }
+                        levelComplete = false;
+                        updateConnectionGraph();
+                        setEditorOverlay();
+                        break;
+                    case 'PLAY LEVEL FROM CODE':
+                        if (loadLevelFromCode()) {
+                            levelIndex = -1;
+                            setLevelOverlay();
+                            checkWin();
+                        }
+                        break;
+                    default:
+                        loadLevel(parseInt(button.textContent!) - 1);
+                        break;
+                }
             }),
         );
     }
@@ -576,6 +773,74 @@ export function february() {
         });
     }
 
+    function setEditorOverlay() {
+        if (editor.type === 'editing') {
+            setOverlay(`
+                <button id="february-menu-button" class="light" style="margin: 5px 0 0 5px">MENU</button>
+            `);
+
+            (document.getElementById('february-menu-button') as HTMLButtonElement).addEventListener('click', () => {
+                clickAudio.play();
+                editor = {type: 'menu'};
+                setEditorOverlay();
+            });
+
+            return;
+        }
+
+        setOverlay(`
+            <button class="light" style="margin: 5px 0 0 5px; position: absolute; pointer-events: none">MENU</button>
+            <div class="center">
+                <div style="position: relative; top: 45px; width: 240px; height: 60px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                    <button>TEST</button>
+                    <button>IMPORT</button>
+                    <button>MAIN MENU</button>
+                    <button>CLEAR</button>
+                </div>
+            </div>
+        `);
+
+        overlay.querySelectorAll('button').forEach(button =>
+            button.addEventListener('click', () => {
+                clickAudio.play();
+
+                switch (button.textContent) {
+                    case 'TEST':
+                        editor = {type: 'testing', level: structuredClone(level)};
+                        setOverlay(`
+                            <button id="february-back-button" class="light" style="margin: 5px 0 0 5px">BACK</button>
+                        `);
+                        (document.getElementById('february-back-button') as HTMLButtonElement).addEventListener(
+                            'click',
+                            () => {
+                                clickAudio.play();
+                                level = (editor as EditorState.Testing).level;
+                                editor = {type: 'menu'};
+                                setEditorOverlay();
+                                updateConnectionGraph();
+                            },
+                        );
+                        checkWin();
+                        break;
+                    case 'CLEAR':
+                        if (!confirm('Are you sure you want to clear the level?')) break;
+                        level = structuredClone(EDITOR_TEMPLATE_LEVEL);
+                        updateConnectionGraph();
+                        editor = {type: 'editing'};
+                        setEditorOverlay();
+                        storage.set('editorLevel', serializeLevel());
+                        break;
+                    case 'IMPORT':
+                        loadLevelFromCode();
+                        break;
+                    case 'MAIN MENU':
+                        openMenu();
+                        break;
+                }
+            }),
+        );
+    }
+
     function clearPingState() {
         if (pingState.type === 'waiting') clearTimeout(pingState.timeoutId);
         pingState = {type: 'standby'};
@@ -587,7 +852,7 @@ export function february() {
 
     function sendStartPing(graph: Graph<ConnectionStatus>) {
         const startIndex = level.towers.findIndex(tower => tower.type === 'start');
-        if (startIndex === -1) return;
+        if (startIndex === -1 || !canEmitUnencrypted(startIndex)) return;
         pingState = {
             type: 'pinging',
             pings: [],
@@ -601,7 +866,7 @@ export function february() {
     }
 
     function checkWin() {
-        if (levelComplete) return;
+        if (levelComplete || editor.type === 'editing' || editor.type === 'menu') return;
         const endTowersIndexes = level.towers.flatMap((tower, index) => (tower.type === 'end' ? [index] : []));
 
         // This is true if we're not on a valid level, like the menu
@@ -611,29 +876,61 @@ export function february() {
             winAudio.play();
             levelComplete = true;
 
-            if (+(storage.get('nextLevel') ?? '0') <= levelIndex) storage.set('nextLevel', levelIndex + 1);
+            if (editor.type === 'none' && +(storage.get('nextLevel') ?? '0') <= levelIndex) {
+                storage.set('nextLevel', levelIndex + 1);
+            }
+
+            const buttons =
+                editor.type === 'none'
+                    ? `
+                        <button class="light">MENU</button>
+                        ${levelIndex === -1 || levelIndex === LEVELS.length - 1 ? '' : '<button id="february-next-button" class="light">NEXT</button>'}
+                    `
+                    : `
+                        <button id="february-back-button" class="light">BACK</button>
+                        <button id="february-copy-button" class="light">COPY CODE</button>
+                        <button id="february-submit-button" class="light">SUBMIT</button>
+                    `;
 
             setOverlay(`
-                <div style="display: flex; flex-direction: column; gap: 10px; background-color: ${BACKGROUND_COLOR}; border: 1px solid var(--ui-white); padding: 15px; align-items: center; margin: 5px 0 0 5px; width: 155px">
+                <div style="display: flex; flex-direction: column; gap: 10px; background-color: ${BACKGROUND_COLOR}; border: 1px solid var(--ui-white); padding: 15px; align-items: center; margin: 5px 0 0 5px; width: fit-content">
                     Level complete 🏆
-                    <div style="display: flex; gap: 10px">
-                        <button id="february-menu-button" class="light">Menu</button>
-                        ${levelIndex === LEVELS.length - 1 ? '' : '<button id="february-next-button" class="light">Next</button>'}
-                    </div>
+                    <div style="display: flex; gap: 5px">${buttons}</div>
                 </div>
             `);
 
-            (document.getElementById('february-menu-button') as HTMLButtonElement).addEventListener('click', () => {
-                clickAudio.play();
-                openMenu();
-            });
-
-            if (levelIndex !== LEVELS.length - 1) {
-                (document.getElementById('february-next-button') as HTMLButtonElement).addEventListener('click', () => {
+            overlay.querySelectorAll('button').forEach(button =>
+                button.addEventListener('click', () => {
                     clickAudio.play();
-                    loadLevel(levelIndex + 1);
-                });
-            }
+
+                    switch (button.textContent) {
+                        case 'MENU':
+                            openMenu();
+                            break;
+                        case 'NEXT':
+                            loadLevel(levelIndex + 1);
+                            break;
+                        case 'BACK':
+                            level = (editor as EditorState.Testing).level;
+                            levelComplete = false;
+                            editor = {type: 'menu'};
+                            setEditorOverlay();
+                            updateConnectionGraph();
+                            break;
+                        case 'COPY CODE':
+                            window.navigator.clipboard.writeText(serializeLevel()).then(() => {
+                                button.innerText = 'COPIED!';
+                                setTimeout(() => (button.innerText = 'COPY CODE'), 1000);
+                            });
+                            break;
+                        case 'SUBMIT':
+                            window.open(
+                                `https://docs.google.com/forms/d/e/1FAIpQLSdYsmMjlxA-qHJraxo_7k9BX1SAq5igL5HO_7LPbxCMUn3azQ/viewform?&entry.1088058743=${encodeURIComponent(serializeLevel())}`,
+                            );
+                            break;
+                    }
+                }),
+            );
         }
     }
 
@@ -707,6 +1004,7 @@ export function february() {
         if (dragging !== undefined) {
             context.strokeStyle =
                 dragging.type === 'tower' && dragging.index === index ? REPEATER_COLOR : REPEATER_PREVIEW_COLOR;
+            context.setLineDash([]);
             context.lineWidth = REPEATER_PREVIEW_WIDTH;
             context.beginPath();
             context.arc(tower.x, tower.y, radius - REPEATER_PREVIEW_WIDTH, 0, 2 * Math.PI);
@@ -726,17 +1024,128 @@ export function february() {
         context.fill();
     }
 
+    function drawTowers(towers: Iterable<[number, Tower]>) {
+        for (const [index, tower] of towers) {
+            context.beginPath();
+            switch (tower.type) {
+                case 'start':
+                    context.fillStyle = START_COLOR;
+                    context.rect(
+                        tower.x - RECTANGLE_SIZE,
+                        tower.y - RECTANGLE_SIZE,
+                        RECTANGLE_SIZE * 2,
+                        RECTANGLE_SIZE * 2,
+                    );
+                    context.fill();
+                    break;
+                case 'end':
+                    context.fillStyle = interpolateColor(
+                        END_COLOR,
+                        UI_WHITE,
+                        pingState.type === 'pulsing'
+                            ? (pingState.endPulses.get(index) ?? 0)
+                            : pingState.type === 'pinging' && pingState.endsHit.has(index)
+                              ? 1
+                              : 0,
+                    );
+                    context.translate(tower.x, tower.y);
+                    context.rotate((45 * Math.PI) / 180);
+                    context.rect(-RECTANGLE_SIZE, -RECTANGLE_SIZE, RECTANGLE_SIZE * 2, RECTANGLE_SIZE * 2);
+                    context.fill();
+                    context.setTransform(1, 0, 0, 1, 0, 0);
+                    break;
+                case 'small repeater':
+                    context.fillStyle = REPEATER_COLOR;
+                    context.arc(tower.x, tower.y, SMALL_REPEATER_RADIUS, 0, 2 * Math.PI);
+                    context.fill();
+                    drawPreview(index, tower, SMALL_REPEATER_CONNECTION_RADIUS);
+                    break;
+                case 'large repeater':
+                    context.fillStyle = REPEATER_COLOR;
+                    context.arc(tower.x, tower.y, LARGE_REPEATER_RADIUS, 0, 2 * Math.PI);
+                    context.fill();
+                    drawPreview(index, tower, LARGE_REPEATER_CONNECTION_RADIUS);
+                    break;
+                case 'encryptor':
+                    context.fillStyle = ENCRYPTOR_COLOR;
+                    context.moveTo(tower.x, tower.y - TRIANGLE_SIZE);
+                    context.lineTo(tower.x + TRIANGLE_SIZE, tower.y + TRIANGLE_SIZE);
+                    context.lineTo(tower.x - TRIANGLE_SIZE, tower.y + TRIANGLE_SIZE);
+                    context.fill();
+                    break;
+                case 'decryptor':
+                    context.fillStyle = DECRYPTOR_COLOR;
+                    context.moveTo(tower.x, tower.y + TRIANGLE_SIZE);
+                    context.lineTo(tower.x + TRIANGLE_SIZE, tower.y - TRIANGLE_SIZE);
+                    context.lineTo(tower.x - TRIANGLE_SIZE, tower.y - TRIANGLE_SIZE);
+                    context.fill();
+                    break;
+                case 'spy':
+                    context.fillStyle = SPY_COLOR;
+                    context.arc(tower.x, tower.y, 10, Math.PI / 8, Math.PI * (7 / 8));
+                    context.fill();
+                    context.beginPath();
+                    context.arc(tower.x, tower.y, 10, Math.PI * (9 / 8), Math.PI * (15 / 8));
+                    context.moveTo(tower.x, tower.y);
+                    context.arc(tower.x, tower.y, 3, 0, 2 * Math.PI);
+                    context.fill();
+                    break;
+            }
+        }
+    }
+
+    function drawWalls(walls: Wall[]) {
+        context.lineWidth = WALL_LINE_WIDTH;
+        context.strokeStyle = WALL_COLOR;
+        context.fillStyle = WALL_COLOR;
+        context.setLineDash([]);
+        for (const {x1, y1, x2, y2, fixed1, fixed2} of walls) {
+            context.beginPath();
+            context.arc(x1, y1, WALL_HANDLE_RADIUS, 0, Math.PI * 2);
+            if (fixed1) {
+                if (['editing', 'menu'].includes(editor.type)) {
+                    context.setLineDash([5]);
+                    context.stroke();
+                    context.setLineDash([]);
+                }
+            } else {
+                context.fill();
+            }
+            context.beginPath();
+            context.moveTo(x1, y1);
+            context.lineTo(x2, y2);
+            context.stroke();
+
+            context.beginPath();
+            context.arc(x2, y2, WALL_HANDLE_RADIUS, 0, Math.PI * 2);
+            if (fixed2) {
+                if (['editing', 'menu'].includes(editor.type)) {
+                    context.setLineDash([5]);
+                    context.stroke();
+                    context.setLineDash([]);
+                }
+            } else {
+                context.fill();
+            }
+        }
+    }
+
     function draw(now: number) {
         context.fillStyle = BACKGROUND_COLOR;
         context.fillRect(0, 0, canvas.width, canvas.height);
 
-        if (level !== BLANK_LEVEL) {
+        context.fillStyle = '#FFFFFF0A';
+        context.textBaseline = 'middle';
+        context.textAlign = 'center';
+        if (level !== BLANK_LEVEL && editor.type === 'none' && levelIndex >= 0) {
             const text = (levelIndex + 1).toString();
             context.font = `350px ${FONT}`;
-            context.fillStyle = '#FFFFFF0A';
-            context.textBaseline = 'middle';
-            context.textAlign = 'center';
             context.fillText(text, canvas.width / 2, canvas.height / 2 + FONT_HEIGHT_OFFSET);
+        }
+
+        if (editor.type === 'testing') {
+            context.font = `80px ${FONT}`;
+            context.fillText('TEST MODE', canvas.width / 2, canvas.height / 2);
         }
 
         const {towers, walls, texts} = level;
@@ -844,94 +1253,14 @@ export function february() {
             pingState = {type: 'waiting', timeoutId: setTimeout(() => sendStartPing(graph), 1000)};
         }
 
-        context.setLineDash([]);
-        for (const [index, tower] of towers.entries()) {
-            context.beginPath();
-            switch (tower.type) {
-                case 'start':
-                    context.fillStyle = START_COLOR;
-                    context.rect(
-                        tower.x - RECTANGLE_SIZE,
-                        tower.y - RECTANGLE_SIZE,
-                        RECTANGLE_SIZE * 2,
-                        RECTANGLE_SIZE * 2,
-                    );
-                    context.fill();
-                    break;
-                case 'end':
-                    context.fillStyle = interpolateColor(
-                        END_COLOR,
-                        UI_WHITE,
-                        pingState.type === 'pulsing'
-                            ? (pingState.endPulses.get(index) ?? 0)
-                            : pingState.type === 'pinging' && pingState.endsHit.has(index)
-                              ? 1
-                              : 0,
-                    );
-                    context.translate(tower.x, tower.y);
-                    context.rotate((45 * Math.PI) / 180);
-                    context.rect(-RECTANGLE_SIZE, -RECTANGLE_SIZE, RECTANGLE_SIZE * 2, RECTANGLE_SIZE * 2);
-                    context.fill();
-                    context.setTransform(1, 0, 0, 1, 0, 0);
-                    break;
-                case 'small repeater':
-                    context.fillStyle = REPEATER_COLOR;
-                    context.arc(tower.x, tower.y, SMALL_REPEATER_RADIUS, 0, 2 * Math.PI);
-                    context.fill();
-                    drawPreview(index, tower, SMALL_REPEATER_CONNECTION_RADIUS);
-                    break;
-                case 'large repeater':
-                    context.fillStyle = REPEATER_COLOR;
-                    context.arc(tower.x, tower.y, LARGE_REPEATER_RADIUS, 0, 2 * Math.PI);
-                    context.fill();
-                    drawPreview(index, tower, LARGE_REPEATER_CONNECTION_RADIUS);
-                    break;
-                case 'encryptor':
-                    context.fillStyle = ENCRYPTOR_COLOR;
-                    context.moveTo(tower.x, tower.y - TRIANGLE_SIZE);
-                    context.lineTo(tower.x + TRIANGLE_SIZE, tower.y + TRIANGLE_SIZE);
-                    context.lineTo(tower.x - TRIANGLE_SIZE, tower.y + TRIANGLE_SIZE);
-                    context.fill();
-                    break;
-                case 'decryptor':
-                    context.fillStyle = DECRYPTOR_COLOR;
-                    context.moveTo(tower.x, tower.y + TRIANGLE_SIZE);
-                    context.lineTo(tower.x + TRIANGLE_SIZE, tower.y - TRIANGLE_SIZE);
-                    context.lineTo(tower.x - TRIANGLE_SIZE, tower.y - TRIANGLE_SIZE);
-                    context.fill();
-                    break;
-                case 'spy':
-                    context.fillStyle = SPY_COLOR;
-                    context.arc(tower.x, tower.y, 10, Math.PI / 8, Math.PI * (7 / 8));
-                    context.fill();
-                    context.beginPath();
-                    context.arc(tower.x, tower.y, 10, Math.PI * (9 / 8), Math.PI * (15 / 8));
-                    context.moveTo(tower.x, tower.y);
-                    context.arc(tower.x, tower.y, 3, 0, 2 * Math.PI);
-                    context.fill();
-                    break;
-            }
+        if (editor.type === 'editing' && dragging !== undefined) {
+            context.textAlign = 'left';
+            context.textBaseline = 'top';
+            context.fillText('🗑️', 5, 12);
         }
 
-        context.lineWidth = WALL_LINE_WIDTH;
-        context.strokeStyle = WALL_COLOR;
-        context.fillStyle = WALL_COLOR;
-        for (const {x1, x2, y1, y2, fixed1, fixed2} of walls) {
-            if (!fixed1) {
-                context.beginPath();
-                context.arc(x1, y1, WALL_HANDLE_RADIUS, 0, Math.PI * 2);
-                context.fill();
-            }
-            context.beginPath();
-            context.moveTo(x1, y1);
-            context.lineTo(x2, y2);
-            context.stroke();
-            if (!fixed2) {
-                context.beginPath();
-                context.arc(x2, y2, WALL_HANDLE_RADIUS, 0, Math.PI * 2);
-                context.fill();
-            }
-        }
+        drawTowers(towers.entries());
+        drawWalls(walls);
 
         if (tooltip.type !== 'none') {
             const {type, x, y} =
@@ -963,6 +1292,17 @@ export function february() {
             context.fillText(type[0].toUpperCase() + type.slice(1), x + (left ? -27.5 : 27.5), y + 2);
         }
 
+        if (editor.type === 'menu') {
+            context.fillStyle = BACKGROUND_COLOR;
+            context.fillRect(canvas.width / 2 - 130, canvas.height / 2 - 100, 260, 200);
+            context.strokeStyle = UI_WHITE;
+            context.setLineDash([]);
+            context.strokeRect(canvas.width / 2 - 130, canvas.height / 2 - 100, 260, 200);
+
+            if (level.towers.length < MAX_TOWERS) drawTowers(EDITOR_LIBRARY_TOWERS.map(tower => [-1, tower]));
+            if (level.walls.length < MAX_WALLS) drawWalls(EDITOR_LIBRARY_WALLS);
+        }
+
         lastTime = now;
         if (!done) requestAnimationFrame(draw);
     }
@@ -988,11 +1328,11 @@ export function february() {
 
     function updateConnectionStatuses() {
         // Emit unencrypted from start
-        for (const [a, b] of graph.search(
-            level.towers.findIndex(tower => tower.type === 'start'),
-            index => canEmitUnencrypted(index),
-        )) {
-            graph.connect(a, b, {unencrypted: true, encrypted: false});
+        const startIndex = level.towers.findIndex(tower => tower.type === 'start');
+        if (canEmitUnencrypted(startIndex)) {
+            for (const [a, b] of graph.search(startIndex, index => canEmitUnencrypted(index))) {
+                graph.connect(a, b, {unencrypted: true, encrypted: false});
+            }
         }
 
         // Emit encrypted from encryptors
@@ -1064,14 +1404,68 @@ export function february() {
         }
 
         for (const [index, {x1, y1, x2, y2, fixed1, fixed2}] of level.walls.entries()) {
-            if (!fixed1) yield {type: 'wall1', index, x: x1, y: y1, radius: WALL_HANDLE_RADIUS};
-            if (!fixed2) yield {type: 'wall2', index, x: x2, y: y2, radius: WALL_HANDLE_RADIUS};
+            if (all || !fixed1) yield {type: 'wall1', index, x: x1, y: y1, radius: WALL_HANDLE_RADIUS};
+            if (all || !fixed2) yield {type: 'wall2', index, x: x2, y: y2, radius: WALL_HANDLE_RADIUS};
         }
     }
 
-    function getClosest(x: number, y: number, extraRadius = 0, all = false) {
-        let closest: {dragging: typeof dragging; distance: number} | undefined;
-        for (const draggable of generateDraggables(all)) {
+    function setupLibraryDraggables() {
+        const result: ({
+            x: number;
+            y: number;
+            radius: number;
+        } & (
+            | {
+                  type: Tower['type'];
+              }
+            | {
+                  type: 'wall1' | 'wall2';
+                  fixed1: boolean;
+                  fixed2: boolean;
+                  otherX: number;
+                  otherY: number;
+              }
+        ))[] = [];
+
+        for (const {type, x, y} of EDITOR_LIBRARY_TOWERS) {
+            const radius = type === 'large repeater' ? LARGE_REPEATER_RADIUS : SMALL_REPEATER_RADIUS;
+            result.push({type, x, y, radius});
+        }
+
+        for (const {x1, y1, x2, y2, fixed1, fixed2} of EDITOR_LIBRARY_WALLS) {
+            result.push({
+                type: 'wall1',
+                x: x1,
+                y: y1,
+                otherX: x2,
+                otherY: y2,
+                radius: LARGE_REPEATER_RADIUS,
+                fixed1,
+                fixed2,
+            });
+            result.push({
+                type: 'wall2',
+                x: x2,
+                y: y2,
+                otherX: x1,
+                otherY: y1,
+                radius: LARGE_REPEATER_RADIUS,
+                fixed1,
+                fixed2,
+            });
+        }
+
+        return result;
+    }
+
+    function getClosest<T extends {x: number; y: number; radius: number}>(
+        draggables: Iterable<T>,
+        x: number,
+        y: number,
+        extraRadius = 0,
+    ) {
+        let closest: {dragging: T; distance: number} | undefined;
+        for (const draggable of draggables) {
             const dist = distance(x, y, draggable.x, draggable.y);
             if (dist <= draggable.radius + extraRadius && dist < (closest?.distance ?? Infinity)) {
                 closest = {dragging: draggable, distance: dist};
@@ -1081,7 +1475,8 @@ export function february() {
     }
 
     function updateTooltip(x: number, y: number) {
-        const hovering = getClosest(x, y, 0, true);
+        if (editor.type !== 'none') return;
+        const hovering = getClosest(generateDraggables(true), x, y, 0);
         if (hovering === undefined) {
             for (const {x1, x2, y1, y2, from, to, type} of getLines()) {
                 if (type === 'spy') continue;
@@ -1097,52 +1492,112 @@ export function february() {
     }
 
     function onPointerDown(event: PointerEvent) {
-        if (levelComplete || event.target !== overlay) return;
+        if (levelComplete || !overlay.contains(event.target as Node)) return;
 
         const {offsetX: x, offsetY: y} = event;
         pointerPosition = {x, y};
-        const closest = getClosest(x, y, DRAG_EXTRA_RADIUS);
+
+        if (editor.type === 'menu') {
+            const closest = getClosest(EDITOR_LIBRARY_DRAGGABLES, x, y);
+            if (closest !== undefined) {
+                if (closest.type === 'wall1' || closest.type === 'wall2') {
+                    if (level.walls.length >= MAX_WALLS) return;
+                    level.walls.push({
+                        x1: closest.type === 'wall1' ? x : closest.otherX,
+                        y1: closest.type === 'wall1' ? y : closest.otherY,
+                        x2: closest.type === 'wall1' ? closest.otherX : x,
+                        y2: closest.type === 'wall1' ? closest.otherY : y,
+                        fixed1: closest.fixed1,
+                        fixed2: closest.fixed2,
+                    });
+                    dragging = {type: closest.type, index: level.walls.length - 1};
+                } else {
+                    if (level.towers.length > MAX_TOWERS) return;
+                    level.towers.push({type: closest.type as Tower['type'], x: x, y: y});
+                    dragging = {type: 'tower', index: level.towers.length - 1};
+                }
+                setOverlay(``);
+                editor = {type: 'editing'};
+                updateConnectionGraph();
+            } else if ((event.target as HTMLElement).tagName !== 'BUTTON') {
+                editor = {type: 'editing'};
+                setEditorOverlay();
+            }
+            return;
+        }
+
+        const closest = getClosest(generateDraggables(editor.type === 'editing'), x, y, DRAG_EXTRA_RADIUS);
 
         if (closest !== undefined) {
+            // Clear the overlay to make room for the trash cans
+            if (editor.type === 'editing') setOverlay(``);
+
             dragging = closest;
             tooltip = {type: 'none'};
             return;
         }
 
-        if (event.pointerType !== 'mouse') {
-            updateTooltip(x, y);
-        }
+        if (event.pointerType !== 'mouse') updateTooltip(x, y);
     }
 
     function onPointerMove(event: PointerEvent) {
         const {offsetX: x, offsetY: y} = event;
         pointerPosition = {x, y};
 
-        const closest = getClosest(x, y);
-        overlay.style.cursor = !levelComplete && closest !== undefined ? 'grab' : '';
-        if (closest === undefined && dragging === undefined) {
-            updateTooltip(x, y);
-            return;
+        if (editor.type === 'menu') {
+            const closest = getClosest(EDITOR_LIBRARY_DRAGGABLES, x, y);
+            overlay.style.cursor =
+                !levelComplete &&
+                closest !== undefined &&
+                ((closest.type.startsWith('wall') && level.walls.length < MAX_WALLS) ||
+                    (!closest.type.startsWith('wall') && level.towers.length < MAX_TOWERS))
+                    ? 'grab'
+                    : '';
+        } else {
+            const closest = getClosest(generateDraggables(false), x, y);
+            overlay.style.cursor = !levelComplete && closest !== undefined ? 'grab' : '';
+            if (closest === undefined && dragging === undefined) {
+                updateTooltip(x, y);
+                return;
+            }
         }
 
         if (dragging === undefined || event.target !== overlay) return;
         if (dragging.type === 'wall1') {
-            level.walls[dragging.index].x1 = clamp(x, WALL_HANDLE_RADIUS, canvas.width - WALL_HANDLE_RADIUS);
-            level.walls[dragging.index].y1 = clamp(y, WALL_HANDLE_RADIUS, canvas.width - WALL_HANDLE_RADIUS);
+            const radius = level.walls[dragging.index].fixed1 ? 0 : WALL_HANDLE_RADIUS;
+            level.walls[dragging.index].x1 = clamp(x, radius, canvas.width - radius);
+            level.walls[dragging.index].y1 = clamp(y, radius, canvas.width - radius);
         } else if (dragging.type === 'wall2') {
-            level.walls[dragging.index].x2 = clamp(x, WALL_HANDLE_RADIUS, canvas.width - WALL_HANDLE_RADIUS);
-            level.walls[dragging.index].y2 = clamp(y, WALL_HANDLE_RADIUS, canvas.width - WALL_HANDLE_RADIUS);
+            const radius = level.walls[dragging.index].fixed2 ? 0 : WALL_HANDLE_RADIUS;
+            level.walls[dragging.index].x2 = clamp(x, radius, canvas.width - radius);
+            level.walls[dragging.index].y2 = clamp(y, radius, canvas.width - radius);
         } else {
             const tower = level.towers[dragging.index];
-            const radius = tower.type === 'small repeater' ? SMALL_REPEATER_RADIUS : LARGE_REPEATER_RADIUS;
+            const radius = tower.type === 'large repeater' ? LARGE_REPEATER_RADIUS : SMALL_REPEATER_RADIUS;
             tower.x = clamp(x, radius, canvas.width - radius);
             tower.y = clamp(y, radius, canvas.height - radius);
         }
         updateConnectionGraph();
     }
 
-    function onPointerUp() {
+    function onPointerUp(event: PointerEvent) {
+        if ((event.target as HTMLElement).tagName === 'BUTTON') return;
+        if (dragging !== undefined && pointerPosition.x < 80 && pointerPosition.y < 45) {
+            if (dragging.type === 'tower') {
+                if (level.towers[dragging.index].type === 'start') {
+                    level.towers[dragging.index].x = canvas.width / 2;
+                    level.towers[dragging.index].y = canvas.height / 2;
+                } else level.towers.splice(dragging.index, 1);
+            } else {
+                level.walls.splice(dragging.index, 1);
+            }
+            updateConnectionGraph();
+        }
         dragging = undefined;
+        if (['editing', 'menu'].includes(editor.type)) {
+            storage.set('editorLevel', serializeLevel());
+            setEditorOverlay();
+        }
         checkWin();
     }
 
