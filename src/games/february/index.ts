@@ -1577,17 +1577,17 @@ export function february() {
         if (dragging === undefined || event.target !== overlay) return;
         if (dragging.type === 'wall1') {
             const radius = level.walls[dragging.index].fixed1 ? 0 : WALL_HANDLE_RADIUS;
-            level.walls[dragging.index].x1 = clamp(x, radius, canvas.width - radius);
-            level.walls[dragging.index].y1 = clamp(y, radius, canvas.width - radius);
+            level.walls[dragging.index].x1 = Math.floor(clamp(x, radius, canvas.width - radius));
+            level.walls[dragging.index].y1 = Math.floor(clamp(y, radius, canvas.width - radius));
         } else if (dragging.type === 'wall2') {
             const radius = level.walls[dragging.index].fixed2 ? 0 : WALL_HANDLE_RADIUS;
-            level.walls[dragging.index].x2 = clamp(x, radius, canvas.width - radius);
-            level.walls[dragging.index].y2 = clamp(y, radius, canvas.width - radius);
+            level.walls[dragging.index].x2 = Math.floor(clamp(x, radius, canvas.width - radius));
+            level.walls[dragging.index].y2 = Math.floor(clamp(y, radius, canvas.width - radius));
         } else {
             const tower = level.towers[dragging.index];
             const radius = tower.type === 'large repeater' ? LARGE_REPEATER_RADIUS : SMALL_REPEATER_RADIUS;
-            tower.x = clamp(x, radius, canvas.width - radius);
-            tower.y = clamp(y, radius, canvas.height - radius);
+            tower.x = Math.floor(clamp(x, radius, canvas.width - radius));
+            tower.y = Math.floor(clamp(y, radius, canvas.height - radius));
         }
         updateConnectionGraph();
     }
