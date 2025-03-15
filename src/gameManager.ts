@@ -7,7 +7,7 @@ import {january} from './games/january';
 const games = [
     january,
     february,
-    makeTextbox('Coming Saturday March 15th'),
+    makeTextbox('Coming Saturday March 22nd'),
     makeTextbox('Coming Saturday April 19th'),
     makeTextbox('Coming Saturday May 17th'),
     makeTextbox('Coming Saturday June 21st'),
