@@ -6,6 +6,11 @@ export const soundEffectsGain = audioContext.createGain();
 musicGain.connect(audioContext.destination);
 soundEffectsGain.connect(audioContext.destination);
 
+export async function downloadAndDecode(src: string) {
+    const arrayBuffer = await fetch(src).then(res => res.arrayBuffer());
+    return await audioContext.decodeAudioData(arrayBuffer);
+}
+
 export function setupSoundEffect(src: string) {
     const audio = new Audio(src);
     const node = audioContext.createMediaElementSource(audio);
@@ -16,12 +21,7 @@ export function setupSoundEffect(src: string) {
 // Music needs to be setup through a buffer so it loops seamlessly
 // Inspired by https://jackyef.com/posts/building-an-audio-loop-player-on-the-web
 export function setupMusic(src: string) {
-    async function downloadAndDecode() {
-        const arrayBuffer = await fetch(src).then(res => res.arrayBuffer());
-        return await audioContext.decodeAudioData(arrayBuffer);
-    }
-
-    const promise = downloadAndDecode();
+    const promise = downloadAndDecode(src);
 
     let blurred = false;
     let stopped = true;
