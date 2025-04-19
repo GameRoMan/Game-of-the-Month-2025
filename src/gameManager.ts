@@ -4,12 +4,13 @@ import {makeTextbox} from './makeTextbox.ts';
 import {january} from './games/january';
 import {february} from './games/february';
 import {march} from './games/march';
+import {april} from './games/april';
 
 const games = [
     january,
     february,
     march,
-    makeTextbox('Coming Saturday April 19th'),
+    april,
     makeTextbox('Coming Saturday May 17th'),
     makeTextbox('Coming Saturday June 21st'),
     makeTextbox('Coming Saturday July 19th'),

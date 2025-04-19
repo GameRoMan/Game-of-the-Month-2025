@@ -57,12 +57,23 @@ button.dark:focus-visible {
 }
 
 button:disabled {
-    background: dimgray;
+    background: #424242;
+}
+
+button.dark:disabled {
+    background: #757575;
 }
 
 button:not(:disabled) {
     background: none;
     cursor: pointer;
+}
+
+button.link {
+    text-transform: none;
+    text-decoration: underline;
+    border: none;
+    padding: 0;
 }
 
 /* This is only needed when offline and font does not load */

@@ -9,7 +9,7 @@ Play them all here: https://gotm.doteye.online
 | January   | Wormhole                       | A variant of Snake where eating one piece of food teleports your head to the other piece of food.       |
 | February  | Relay                          | A puzzle game about carefully positioning repeaters and walls to safely send a secret message.          |
 | March     | Brick Bop                      | A daily game about carefully positioning blocks, optimizing your score, and making music along the way. |
-| April     | Coming Saturday April 19th     |                                                                                                         |
+| April     | Kornivore                      | A corn maze game where the walls are edible.                                                            |
 | May       | Coming Saturday May 17th       |                                                                                                         |
 | June      | Coming Saturday June 21st      |                                                                                                         |
 | July      | Coming Saturday July 19th      |                                                                                                         |

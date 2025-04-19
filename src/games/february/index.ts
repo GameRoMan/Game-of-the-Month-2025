@@ -719,7 +719,7 @@ export function february() {
         setOverlay(`
             <div style="display: flex; flex-direction: column; align-items: center">
                 <img src="${logo}" alt="Relay" width="400">
-                <div style="display: flex; flex-direction: column; gap: 25px; align-items: center"> 
+                <div style="display: flex; flex-direction: column; gap: 25px; align-items: center">
                     <div style="display: flex; gap: 5px; width: 500px; flex-wrap: wrap; justify-content: center">
                         ${LEVELS.map((_, index) => `<button class="light" style="width: 70px; height: 35px; ${nextLevel === index ? 'border-width: 5px; border-style: dashed; padding: 0' : ''}" ${nextLevel < index ? 'disabled' : ''}>${index + 1} ${nextLevel > index ? '🏆' : ''}</button>`).join('')}
                     </div>
@@ -898,7 +898,7 @@ export function february() {
                 editor.type === 'none'
                     ? `
                         <button class="light">MENU</button>
-                        ${levelIndex === -1 || levelIndex === LEVELS.length - 1 ? '' : '<button id="february-next-button" class="light">NEXT</button>'}
+                        ${levelIndex === -1 || levelIndex === LEVELS.length - 1 ? '' : '<button class="light">NEXT</button>'}
                     `
                     : `
                         <button id="february-back-button" class="light">BACK</button>
