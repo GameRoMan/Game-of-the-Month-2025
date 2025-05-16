@@ -11,7 +11,7 @@ const games = [
     february,
     march,
     april,
-    makeTextbox('Coming Saturday May 17th'),
+    makeTextbox('Coming Saturday May 24th'),
     makeTextbox('Coming Saturday June 21st'),
     makeTextbox('Coming Saturday July 19th'),
     makeTextbox('Coming Saturday August 16th'),
