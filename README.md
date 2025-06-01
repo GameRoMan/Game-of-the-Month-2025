@@ -10,7 +10,7 @@ Play them all here: https://gotm.doteye.online
 | February  | Relay                          | A puzzle game about carefully positioning repeaters and walls to safely send a secret message.          |
 | March     | Brick Bop                      | A daily game about carefully positioning blocks, optimizing your score, and making music along the way. |
 | April     | Kornivore                      | A corn maze game where the walls are edible.                                                            |
-| May       | Coming Saturday May 17th       |                                                                                                         |
+| May       | Star Squad                     | A spaced-themed survival game where you hire crewmates to operate different controls on your ship.      |
 | June      | Coming Saturday June 21st      |                                                                                                         |
 | July      | Coming Saturday July 19th      |                                                                                                         |
 | August    | Coming Saturday August 16th    |                                                                                                         |

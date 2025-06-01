@@ -5,13 +5,14 @@ import {january} from './games/january';
 import {february} from './games/february';
 import {march} from './games/march';
 import {april} from './games/april';
+import {may} from './games/may';
 
 const games = [
     january,
     february,
     march,
     april,
-    makeTextbox('Coming Saturday May 24th'),
+    may,
     makeTextbox('Coming Saturday June 21st'),
     makeTextbox('Coming Saturday July 19th'),
     makeTextbox('Coming Saturday August 16th'),

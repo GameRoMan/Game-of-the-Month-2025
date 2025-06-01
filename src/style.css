@@ -29,7 +29,7 @@ main {
 }
 
 main > h1 {
-    margin: 50px 0 25px 0;
+    margin-top: 50px;
     text-align: center;
 }
 
@@ -38,6 +38,7 @@ button {
     padding: 7px 14px;
     text-transform: uppercase;
     user-select: none;
+    -webkit-user-select: none;
     color: var(--ui-white);
     border-radius: 0;
     line-height: 1.5;
@@ -100,7 +101,11 @@ footer {
 }
 
 a {
-    color: #add8e6;
+    color: #d07e9e;
+}
+
+a.icon {
+    text-decoration: none;
 }
 
 li {
@@ -111,6 +116,7 @@ canvas {
     outline: 1px solid var(--ui-white);
     max-width: 100%;
     user-select: none;
+    -webkit-user-select: none;
     touch-action: none;
 }
 
@@ -136,6 +142,7 @@ td {
     pointer-events: none;
     touch-action: none;
     user-select: none;
+    -webkit-user-select: none;
     color: var(--ui-white);
 }
 
@@ -171,6 +178,7 @@ td {
     align-items: center;
     gap: 10px;
     user-select: none;
+    -webkit-user-select: none;
 }
 
 #settings input,
@@ -197,11 +205,28 @@ td {
 }
 
 .links {
-    padding: 15px;
+    display: flex;
+    gap: 10px;
+    padding: 0 0 5px 10px;
+    flex-wrap: wrap;
+    max-width: 35%;
+}
+
+.footer-center {
+    padding-bottom: 5px;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 12px;
 }
 
 .eye-background {
     filter: url(#glow) blur(1px);
+}
+
+.credits {
+    font-size: 12px;
+    margin: 0 0 25px 0;
 }
 
 @media (prefers-color-scheme: light) {
@@ -225,6 +250,6 @@ td {
     }
 
     a {
-        color: #003fca;
+        color: #1a2b3c;
     }
 }

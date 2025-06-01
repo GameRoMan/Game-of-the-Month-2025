@@ -17,9 +17,9 @@ import music5 from './music/05strings.mp3';
 import music6 from './music/06full.mp3';
 import unisonBend from './sounds/unisonBend.mp3';
 import {FONT, UI_BLACK} from '../../shared/style.ts';
-import {audioContext, downloadAndDecode, musicGain, setupSoundEffect} from '../../audio.ts';
+import {audioContext, downloadAndDecode, setupSoundEffect} from '../../audio.ts';
 import {canvas, context, overlay, setOverlay} from '../../dom.ts';
-import {choice, distance, getRectangleIntersection, randomInt, weightedChoice} from '../../util.ts';
+import {choice, distance, getRectangleIntersection, randomInt, setupBufferSource, weightedChoice} from '../../util.ts';
 import {create} from 'random-seed';
 import {setupStorage} from '../../shared/storage.ts';
 
@@ -145,20 +145,6 @@ export function march() {
     let selectedDate = TODAY;
     let state: State.Any = {type: 'menu'};
     let trails: {lines: {x1: number; y1: number; x2: number; y2: number}[]; dots: {x: number; y: number}[]}[] = [];
-
-    function setupBufferSource(buffer: AudioBuffer) {
-        const gain = audioContext.createGain();
-        gain.gain.value = 0;
-        gain.connect(musicGain);
-
-        const source = audioContext.createBufferSource();
-        source.buffer = buffer;
-        source.loop = true;
-        source.connect(gain);
-        source.start();
-
-        return {source, gain};
-    }
 
     let bufferSources: ReturnType<typeof setupBufferSource>[] = [];
     Promise.all<AudioBuffer>([music1, music2, music3, music4, music5, music6].map(downloadAndDecode)).then(decoded => {

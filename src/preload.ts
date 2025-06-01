@@ -1,5 +1,8 @@
 import januaryLogo from './games/january/logo.webp';
 import februaryLogo from './games/february/logo.webp';
+import marchLogo from './games/march/logo.webp';
+import aprilLogo from './games/april/logo.png';
+import mayLogo from './games/may/logo.webp';
 
 const preloaded = [];
 function preloadImage(src: string) {
@@ -11,4 +14,7 @@ function preloadImage(src: string) {
 export function preload() {
     preloadImage(januaryLogo);
     preloadImage(februaryLogo);
+    preloadImage(marchLogo);
+    preloadImage(aprilLogo);
+    preloadImage(mayLogo);
 }

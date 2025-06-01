@@ -1,3 +1,5 @@
+import {audioContext, musicGain} from './audio.ts';
+
 export function randomInt(min: number, max: number, generator: () => number = Math.random) {
     return Math.floor(generator() * (max - min + 1)) + min;
 }
@@ -134,4 +136,22 @@ export function interpolateColor(a: string, b: string, amount: number) {
         const other = parseColor(b)[i];
         return Math.round(value + (other - value) * amount);
     })})`;
+}
+
+export function modulo(a: number, b: number) {
+    return ((a % b) + b) % b;
+}
+
+export function setupBufferSource(buffer: AudioBuffer) {
+    const gain = audioContext.createGain();
+    gain.gain.value = 0;
+    gain.connect(musicGain);
+
+    const source = audioContext.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.connect(gain);
+    source.start();
+
+    return {source, gain};
 }
