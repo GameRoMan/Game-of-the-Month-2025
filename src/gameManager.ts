@@ -22,17 +22,19 @@ const games = [
     makeTextbox('Coming Saturday December 20th'),
 ];
 
+const defaultMonthIndex = 4;
+
 let monthIndex: number;
 let callback: (() => void) | undefined = undefined;
 
 function updateMonthFromHash() {
     if (location.hash === '') {
-        monthIndex = 0;
+        monthIndex = defaultMonthIndex;
         return;
     }
 
     const hashMonth = new Date(`${location.hash.slice(1)} 1 2025`).getMonth();
-    monthIndex = isNaN(hashMonth) || hashMonth < 0 || hashMonth > 11 ? 0 : hashMonth;
+    monthIndex = isNaN(hashMonth) || hashMonth < 0 || hashMonth > 11 ? defaultMonthIndex : hashMonth;
 }
 
 function getMonthString() {
